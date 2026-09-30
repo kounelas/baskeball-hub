@@ -46,12 +46,12 @@ def get_game_score(season, gamecode):
     return {}
 
 @st.cache_data(ttl=3600)
-def get_standings():
+def get_standings(season):
     st_obj = Standings(COMPETITION_CODE)
     # Try current season rounds
     for r in range(34, 0, -1):
         try:
-            df = st_obj.get_standings(season=SEASON, round_number=r)
+            df = st_obj.get_standings(season=season, round_number=r)
             if not df.empty:
                 return df
         except Exception:
@@ -59,7 +59,7 @@ def get_standings():
     # Fallback to previous season if current is empty
     for r in range(34, 0, -1):
         try:
-            df = st_obj.get_standings(season=SEASON-1, round_number=r)
+            df = st_obj.get_standings(season=season-1, round_number=r)
             if not df.empty:
                 return df
         except Exception:
@@ -67,32 +67,32 @@ def get_standings():
     return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
-def get_team_stats():
+def get_team_stats(season):
     try:
         ts_obj = TeamStats(COMPETITION_CODE)
-        df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
+        df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{season}"})
         if df.empty:
-            df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON-1}"})
+            df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{season-1}"})
         return df
     except Exception as e:
         return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
-def get_player_stats():
+def get_player_stats(season):
     try:
         ps_obj = PlayerStats(COMPETITION_CODE)
-        df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
+        df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{season}"})
         if df.empty:
-            df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON-1}"})
+            df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{season-1}"})
         return df
     except Exception as e:
         return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
-def get_schedule():
+def get_schedule(season):
     try:
         sch_obj = Schedule(COMPETITION_CODE)
-        df = sch_obj.get_schedule(season=SEASON)
+        df = sch_obj.get_schedule(season=season)
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -124,10 +124,10 @@ def get_news(url):
 tabs = st.tabs(["🎯 Team Dashboard", "📰 League News"])
 
 with tabs[0]:
-    standings_df = get_standings()
-    schedule_df = get_schedule()
-    team_df = get_team_stats()
-    player_df = get_player_stats()
+    standings_df = get_standings(SEASON)
+    schedule_df = get_schedule(SEASON)
+    team_df = get_team_stats(SEASON)
+    player_df = get_player_stats(SEASON)
     
     if not standings_df.empty:
         # Create a dictionary of Team Name -> Team Code
