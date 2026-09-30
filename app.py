@@ -7,6 +7,7 @@ from euroleague_api.standings import Standings
 from euroleague_api.team_stats import TeamStats
 from euroleague_api.player_stats import PlayerStats
 from euroleague_api.schedule import Schedule
+from euroleague_api.game_metadata import GameMetadata
 
 st.set_page_config(page_title="Euroleague Real-Time Hub", layout="wide")
 
@@ -15,6 +16,34 @@ st.markdown("Your ultimate companion for radio show prep: Real-time standings, s
 
 COMPETITION_CODE = "E"
 SEASON = 2026 # 2026-2027 season
+
+@st.cache_data(ttl=3600)
+def get_game_score(season, gamecode):
+    try:
+        gm = GameMetadata(COMPETITION_CODE)
+        df = gm.get_game_metadata(season=season, gamecode=gamecode)
+        if not df.empty:
+            row = df.iloc[0]
+            # Figure out who is home and away based on CodeTeamA
+            return {
+                row.get('CodeTeamA', ''): row.get('ScoreA', ''),
+                row.get('CodeTeamB', ''): row.get('ScoreB', '')
+            }
+    except Exception:
+        pass
+        
+    try:
+        gm = GameMetadata(COMPETITION_CODE)
+        df = gm.get_game_metadata(season=season-1, gamecode=gamecode)
+        if not df.empty:
+            row = df.iloc[0]
+            return {
+                row.get('CodeTeamA', ''): row.get('ScoreA', ''),
+                row.get('CodeTeamB', ''): row.get('ScoreB', '')
+            }
+    except Exception:
+        pass
+    return {}
 
 @st.cache_data(ttl=3600)
 def get_standings():
@@ -91,83 +120,135 @@ def get_news(url):
         st.error(f"Error fetching news: {e}")
     return news_items
 
-tabs = st.tabs([
-    "📊 Euroleague Standings", 
-    "📅 Euroleague Schedule",
-    "📈 Team Stats", 
-    "⭐ Player Stats", 
-    "📰 Euroleague News",
-    "🇬🇷 Greek League News"
-])
+# Main Layout
+tabs = st.tabs(["🎯 Team Dashboard", "📰 League News"])
 
 with tabs[0]:
-    st.header("Euroleague Standings")
     standings_df = get_standings()
+    schedule_df = get_schedule()
+    team_df = get_team_stats()
+    player_df = get_player_stats()
+    
     if not standings_df.empty:
-        # Filter for less details
-        cols = ['position', 'club.name', 'gamesPlayed', 'gamesWon', 'gamesLost', 'pointsFor', 'pointsAgainst', 'pointsDifference']
-        cols = [c for c in cols if c in standings_df.columns]
-        st.dataframe(standings_df[cols], use_container_width=True)
+        # Create a dictionary of Team Name -> Team Code
+        teams_dict = dict(zip(standings_df['club.name'], standings_df['club.code']))
+        selected_team = st.selectbox("Select a Team to View", sorted(teams_dict.keys()))
+        team_code = teams_dict[selected_team]
+        
+        st.header(f"{selected_team} Dashboard")
+        
+        col1, col2 = st.columns(2)
+        
+        # Current Standing
+        with col1:
+            st.subheader("Current Standing")
+            team_standing = standings_df[standings_df['club.code'] == team_code]
+            if not team_standing.empty:
+                row = team_standing.iloc[0]
+                st.metric("Position", row.get('position', '-'))
+                st.write(f"**Record:** {row.get('gamesWon', 0)} W - {row.get('gamesLost', 0)} L")
+                st.write(f"**Points Difference:** {row.get('pointsDifference', 0)}")
+        
+        # Team Stats
+        with col2:
+            st.subheader("Team Stats (Avg Per Game)")
+            t_stats = team_df[team_df['team.code'] == team_code]
+            if not t_stats.empty:
+                row = t_stats.iloc[0]
+                st.write(f"**Points:** {row.get('pointsScored', 0)}")
+                st.write(f"**Rebounds:** {row.get('totalRebounds', 0)}")
+                st.write(f"**Assists:** {row.get('assists', 0)}")
+                st.write(f"**PIR:** {row.get('pir', 0)}")
+                
+        st.divider()
+        
+        # Schedule Section
+        st.subheader("Match Schedule")
+        colA, colB = st.columns(2)
+        
+        if not schedule_df.empty:
+            # Filter for this team
+            team_schedule = schedule_df[(schedule_df.get('homecode') == team_code) | (schedule_df.get('awaycode') == team_code)]
+            
+            with colA:
+                st.markdown("**Previous Matches**")
+                if 'played' in team_schedule.columns:
+                    past = team_schedule[team_schedule['played'] == 'true']
+                    if not past.empty:
+                        # Show last 3 games
+                        for _, row in past.tail(3).iterrows():
+                            home_code = row.get('homecode', '')
+                            away_code = row.get('awaycode', '')
+                            gamecode = row.get('gamecode')
+                            
+                            score_dict = get_game_score(SEASON, gamecode)
+                            
+                            home_score = score_dict.get(home_code, '-')
+                            away_score = score_dict.get(away_code, '-')
+                            
+                            with st.container():
+                                st.markdown(f"*{row.get('date', '')}*<br/>**{row.get('hometeam', '')}** {home_score} - {away_score} **{row.get('awayteam', '')}**", unsafe_allow_html=True)
+                                st.divider()
+                    else:
+                        st.info("No past matches found.")
+                else:
+                    st.info("No past matches found.")
+                    
+            with colB:
+                st.markdown("**Upcoming Matches**")
+                if 'played' in team_schedule.columns:
+                    upcoming = team_schedule[team_schedule['played'] == 'false']
+                else:
+                    upcoming = team_schedule
+                    
+                if not upcoming.empty:
+                    # Show next 3 games
+                    for _, row in upcoming.head(3).iterrows():
+                        with st.container():
+                            st.markdown(f"*{row.get('date', '')} {row.get('startime', '')}*<br/>**{row.get('hometeam', '')}** vs **{row.get('awayteam', '')}**", unsafe_allow_html=True)
+                            st.divider()
+                else:
+                    st.info("No upcoming matches found.")
+        else:
+            st.warning("Could not load schedule.")
+                
+        st.subheader("Team Players")
+        if not player_df.empty:
+            p_stats = player_df[player_df['player.team.code'] == team_code]
+            if not p_stats.empty:
+                # Sort by PIR
+                p_stats = p_stats.sort_values(by='pir', ascending=False)
+                cols = ['player.name', 'gamesPlayed', 'pointsScored', 'totalRebounds', 'assists', 'steals', 'blocks', 'turnovers', 'pir']
+                cols = [c for c in cols if c in p_stats.columns]
+                st.dataframe(p_stats[cols], use_container_width=True)
+            else:
+                st.info("No player stats found.")
+                
     else:
-        st.warning("Could not fetch standings for the current season yet.")
+        st.warning("Data is currently loading or unavailable. Please wait.")
 
 with tabs[1]:
-    st.header("Upcoming Euroleague Schedule")
-    schedule_df = get_schedule()
-    if not schedule_df.empty:
-        # Filter for upcoming games (played == 'false')
-        if 'played' in schedule_df.columns:
-            upcoming = schedule_df[schedule_df['played'] == 'false']
+    colA, colB = st.columns(2)
+    with colA:
+        st.header("Latest Euroleague News")
+        el_news = get_news("https://www.eurohoops.net/en/euroleague/feed/")
+        if el_news:
+            for item in el_news:
+                with st.expander(item["title"]):
+                    st.write(f"**Published:** {item['pubDate']}")
+                    st.write(item["description"])
+                    st.markdown(f"[Read full article]({item['link']})")
         else:
-            upcoming = schedule_df
-            
-        cols = ['round', 'date', 'startime', 'hometeam', 'awayteam']
-        cols = [c for c in cols if c in upcoming.columns]
-        st.dataframe(upcoming[cols], use_container_width=True)
-    else:
-        st.warning("Could not fetch schedule at the moment.")
+            st.warning("No Euroleague news available.")
 
-with tabs[2]:
-    st.header("Team Performance")
-    team_df = get_team_stats()
-    if not team_df.empty:
-        cols = ['team.name', 'pointsScored', 'totalRebounds', 'assists', 'steals', 'blocks', 'turnovers', 'pir']
-        cols = [c for c in cols if c in team_df.columns]
-        st.dataframe(team_df[cols], use_container_width=True)
-    else:
-        st.warning("Could not fetch team stats at the moment.")
-
-with tabs[3]:
-    st.header("Player Highlights")
-    player_df = get_player_stats()
-    if not player_df.empty:
-        cols = ['player.name', 'player.team.name', 'gamesPlayed', 'pointsScored', 'totalRebounds', 'assists', 'steals', 'pir']
-        cols = [c for c in cols if c in player_df.columns]
-        st.dataframe(player_df[cols], use_container_width=True)
-    else:
-        st.warning("Could not fetch player stats at the moment.")
-
-with tabs[4]:
-    st.header("Latest Euroleague News & Talking Points")
-    el_news = get_news("https://www.eurohoops.net/en/euroleague/feed/")
-    if el_news:
-        for item in el_news:
-            with st.expander(item["title"]):
-                st.write(f"**Published:** {item['pubDate']}")
-                st.write(item["description"])
-                st.markdown(f"[Read full article]({item['link']})")
-    else:
-        st.warning("No Euroleague news available.")
-
-with tabs[5]:
-    st.header("Latest Greek Basket League News")
-    st.info("Live Greek League standings require a paid data provider. Instead, here is a live feed of the latest Greek League (ESAKE) news and results to fuel your show!")
-    gr_news = get_news("https://www.eurohoops.net/en/heba/feed/")
-    if gr_news:
-        for item in gr_news:
-            with st.expander(item["title"]):
-                st.write(f"**Published:** {item['pubDate']}")
-                st.write(item["description"])
-                st.markdown(f"[Read full article]({item['link']})")
-    else:
-        st.warning("No Greek League news available.")
+    with colB:
+        st.header("Latest Greek Basket League News")
+        gr_news = get_news("https://www.eurohoops.net/en/heba/feed/")
+        if gr_news:
+            for item in gr_news:
+                with st.expander(item["title"]):
+                    st.write(f"**Published:** {item['pubDate']}")
+                    st.write(item["description"])
+                    st.markdown(f"[Read full article]({item['link']})")
+        else:
+            st.warning("No Greek League news available.")
