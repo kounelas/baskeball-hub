@@ -16,8 +16,16 @@ st.markdown("Your ultimate companion for radio show prep: Real-time standings, s
 
 COMPETITION_CODE = "E"
 SEASON = 2026 # 2026-2027 season
+CACHE_TTL = 120 # Cache data for 2 minutes for near real-time updates
 
-@st.cache_data(ttl=3600)
+with st.sidebar:
+    st.header("Controls")
+    if st.button("🔄 Force Live Refresh"):
+        st.cache_data.clear()
+        st.rerun()
+    st.info("Data auto-refreshes every 2 minutes. Click the button to force an immediate live sync.")
+
+@st.cache_data(ttl=CACHE_TTL)
 def get_game_score(season, gamecode):
     try:
         # gamecode in schedule is like 'E2025_406', we need the integer 406
@@ -51,7 +59,7 @@ def get_game_score(season, gamecode):
         pass
     return {}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=CACHE_TTL)
 def get_standings(season):
     st_obj = Standings(COMPETITION_CODE)
     # Try current season rounds
@@ -72,7 +80,7 @@ def get_standings(season):
             pass
     return pd.DataFrame()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=CACHE_TTL)
 def get_team_stats(season):
     try:
         ts_obj = TeamStats(COMPETITION_CODE)
@@ -83,7 +91,7 @@ def get_team_stats(season):
     except Exception as e:
         return pd.DataFrame()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=CACHE_TTL)
 def get_player_stats(season):
     try:
         ps_obj = PlayerStats(COMPETITION_CODE)
@@ -94,7 +102,7 @@ def get_player_stats(season):
     except Exception as e:
         return pd.DataFrame()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=CACHE_TTL)
 def get_schedule(season):
     try:
         sch_obj = Schedule(COMPETITION_CODE)
