@@ -20,8 +20,11 @@ SEASON = 2026 # 2026-2027 season
 @st.cache_data(ttl=3600)
 def get_game_score(season, gamecode):
     try:
+        # gamecode in schedule is like 'E2025_406', we need the integer 406
+        int_gamecode = int(str(gamecode).split('_')[-1])
+        
         gm = GameMetadata(COMPETITION_CODE)
-        df = gm.get_game_metadata(season=season, gamecode=gamecode)
+        df = gm.get_game_metadata(season=season, gamecode=int_gamecode)
         if not df.empty:
             row = df.iloc[0]
             # Figure out who is home and away based on CodeTeamA
@@ -33,8 +36,11 @@ def get_game_score(season, gamecode):
         pass
         
     try:
+        # gamecode in schedule is like 'E2025_406', we need the integer 406
+        int_gamecode = int(str(gamecode).split('_')[-1])
+        
         gm = GameMetadata(COMPETITION_CODE)
-        df = gm.get_game_metadata(season=season-1, gamecode=gamecode)
+        df = gm.get_game_metadata(season=season-1, gamecode=int_gamecode)
         if not df.empty:
             row = df.iloc[0]
             return {
