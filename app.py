@@ -18,18 +18,21 @@ SEASON = 2024 # Current season
 
 @st.cache_data(ttl=3600)
 def get_standings():
-    try:
-        st_obj = Standings(COMPETITION_CODE)
-        df = st_obj.get_standings(season=SEASON, round_number=None)
-        return df
-    except Exception as e:
-        return pd.DataFrame()
+    st_obj = Standings(COMPETITION_CODE)
+    for r in range(34, 0, -1):
+        try:
+            df = st_obj.get_standings(season=SEASON, round_number=r)
+            if not df.empty:
+                return df
+        except Exception:
+            pass
+    return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
 def get_team_stats():
     try:
         ts_obj = TeamStats(COMPETITION_CODE)
-        df = ts_obj.get_team_stats(season=SEASON, stat_category="Traditional")
+        df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -38,7 +41,7 @@ def get_team_stats():
 def get_player_stats():
     try:
         ps_obj = PlayerStats(COMPETITION_CODE)
-        df = ps_obj.get_player_stats(season=SEASON, stat_category="Traditional")
+        df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
         return df
     except Exception as e:
         return pd.DataFrame()
