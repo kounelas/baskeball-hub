@@ -112,16 +112,18 @@ with tabs[0]:
         st.warning("Could not fetch standings for the current season yet.")
 
 with tabs[1]:
-    st.header("Euroleague Schedule")
+    st.header("Upcoming Euroleague Schedule")
     schedule_df = get_schedule()
     if not schedule_df.empty:
-        # Keep it simple
-        if 'localTeam.name' in schedule_df.columns:
-            cols = ['round', 'date', 'localTeam.name', 'awayTeam.name', 'localTeam.score', 'awayTeam.score']
+        # Filter for upcoming games (played == 'false')
+        if 'played' in schedule_df.columns:
+            upcoming = schedule_df[schedule_df['played'] == 'false']
         else:
-            cols = list(schedule_df.columns)[:6] # Fallback
-        cols = [c for c in cols if c in schedule_df.columns]
-        st.dataframe(schedule_df[cols], use_container_width=True)
+            upcoming = schedule_df
+            
+        cols = ['round', 'date', 'startime', 'hometeam', 'awayteam']
+        cols = [c for c in cols if c in upcoming.columns]
+        st.dataframe(upcoming[cols], use_container_width=True)
     else:
         st.warning("Could not fetch schedule at the moment.")
 
