@@ -14,14 +14,23 @@ st.title("🏀 Basketball Real-Time Hub")
 st.markdown("Your ultimate companion for radio show prep: Real-time standings, stats, schedules, and news.")
 
 COMPETITION_CODE = "E"
-SEASON = 2024 # Current season
+SEASON = 2026 # 2026-2027 season
 
 @st.cache_data(ttl=3600)
 def get_standings():
     st_obj = Standings(COMPETITION_CODE)
+    # Try current season rounds
     for r in range(34, 0, -1):
         try:
             df = st_obj.get_standings(season=SEASON, round_number=r)
+            if not df.empty:
+                return df
+        except Exception:
+            pass
+    # Fallback to previous season if current is empty
+    for r in range(34, 0, -1):
+        try:
+            df = st_obj.get_standings(season=SEASON-1, round_number=r)
             if not df.empty:
                 return df
         except Exception:
@@ -33,6 +42,8 @@ def get_team_stats():
     try:
         ts_obj = TeamStats(COMPETITION_CODE)
         df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
+        if df.empty:
+            df = ts_obj.get_team_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON-1}"})
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -42,6 +53,8 @@ def get_player_stats():
     try:
         ps_obj = PlayerStats(COMPETITION_CODE)
         df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON}"})
+        if df.empty:
+            df = ps_obj.get_player_stats(endpoint="traditional", params={"seasoncode": f"E{SEASON-1}"})
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -91,15 +104,24 @@ with tabs[0]:
     st.header("Euroleague Standings")
     standings_df = get_standings()
     if not standings_df.empty:
-        st.dataframe(standings_df, use_container_width=True)
+        # Filter for less details
+        cols = ['position', 'club.name', 'gamesPlayed', 'gamesWon', 'gamesLost', 'pointsFor', 'pointsAgainst', 'pointsDifference']
+        cols = [c for c in cols if c in standings_df.columns]
+        st.dataframe(standings_df[cols], use_container_width=True)
     else:
-        st.warning("Could not fetch standings at the moment.")
+        st.warning("Could not fetch standings for the current season yet.")
 
 with tabs[1]:
     st.header("Euroleague Schedule")
     schedule_df = get_schedule()
     if not schedule_df.empty:
-        st.dataframe(schedule_df, use_container_width=True)
+        # Keep it simple
+        if 'localTeam.name' in schedule_df.columns:
+            cols = ['round', 'date', 'localTeam.name', 'awayTeam.name', 'localTeam.score', 'awayTeam.score']
+        else:
+            cols = list(schedule_df.columns)[:6] # Fallback
+        cols = [c for c in cols if c in schedule_df.columns]
+        st.dataframe(schedule_df[cols], use_container_width=True)
     else:
         st.warning("Could not fetch schedule at the moment.")
 
@@ -107,7 +129,9 @@ with tabs[2]:
     st.header("Team Performance")
     team_df = get_team_stats()
     if not team_df.empty:
-        st.dataframe(team_df, use_container_width=True)
+        cols = ['team.name', 'pointsScored', 'totalRebounds', 'assists', 'steals', 'blocks', 'turnovers', 'pir']
+        cols = [c for c in cols if c in team_df.columns]
+        st.dataframe(team_df[cols], use_container_width=True)
     else:
         st.warning("Could not fetch team stats at the moment.")
 
@@ -115,7 +139,9 @@ with tabs[3]:
     st.header("Player Highlights")
     player_df = get_player_stats()
     if not player_df.empty:
-        st.dataframe(player_df, use_container_width=True)
+        cols = ['player.name', 'player.team.name', 'gamesPlayed', 'pointsScored', 'totalRebounds', 'assists', 'steals', 'pir']
+        cols = [c for c in cols if c in player_df.columns]
+        st.dataframe(player_df[cols], use_container_width=True)
     else:
         st.warning("Could not fetch player stats at the moment.")
 
